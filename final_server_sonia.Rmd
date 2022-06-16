@@ -1,0 +1,203 @@
+---
+title: "Final_Server_Sonia"
+output:
+  word_document: default
+  html_notebook: default
+---
+BIS 581
+#load libraries
+```{r libs, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidytext)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(ggraph)
+library(igraph)
+```
+
+
+```{r}
+VDI <- read.csv("vdi_serverlogs.csv", header=TRUE, stringsAsFactors = FALSE)
+
+apps <- read.csv("vdi_statsapps.csv", header=TRUE, stringsAsFactors = FALSE)
+```
+
+
+join the two together
+```{r}
+apps$VDI_ID <- as.integer(apps$VDI_ID)
+usage <-  VDI %>% inner_join(apps)
+#clean up
+
+```
+```{r}
+##Viewing summary statistics of the data set
+summary(usage)
+```
+
+```{r}
+##Omitting NA'S (missing values) from data set
+usage_1<-na.omit(usage)
+```
+**There are some missing values. I used na.omit to remove the missing values from the data set.**
+
+```{r}
+##Viewing summary statistics of the data set without missing values
+summary(usage_1)
+```
+**Now there are no missing values.**
+
+```{r}
+##Converting the character to the Date class using the as.Date function
+usage_1$logon_DTS=as.Date(usage_1$logon_DTS,"%m/%d/%y")
+```
+**I am not concerned with the time at this point but do want the date to be cast to a date type.**
+
+
+```{r}
+##Separating logon_DTS
+date_login=separate(usage_1,logon_DTS,c("login.Year", "login.Month", "login.Day"), sep = "-")
+```
+**I separated the logon_DTS column by year, month and day to extract the 2015 data set.**
+
+
+```{r}
+##Extracting the 2015 data set
+usage_2015<-date_login[date_login$login.Year=="2015",]
+```
+**Now the data set is for the year 2015.**
+
+
+
+```{r}
+##Trying to pick all words starting with 'CMU' from column comp_name
+library(tidyverse)
+##Creating a new data set where comp_name starts with 'CMU'
+usage_2015%>% filter(str_detect(comp_name, "CMU"))  
+usage_2015_CMU1<-usage_2015%>% filter(str_detect(comp_name, "CMU"))
+```
+**Now the data set is for the year 2015 and VDI machine only.**
+
+```{r}
+ggplot(data=usage_2015_CMU1, aes(avg_cpu))+geom_bar(stat = "bin")+ggtitle("Average CPU Time")
+```
+
+**The above graph is showing the average CPU usage by the users.**
+
+**How many users were on the system total?**
+
+```{r}
+##Users on the system total
+usage_2015_CMU1%>% count(userid)
+```
+```{r}
+length(unique(usage_2015_CMU1$userid))
+```
+**There are total 3013 users on the system.**
+
+
+**What is the average number of users per day?**
+
+```{r}
+##Combining 3 columns in 1 column
+usage_2015_CMU11<-unite(usage_2015_CMU1,logon_DTS,c("login.Year","login.Month","login.Day"))
+```
+
+```{r}
+usage_2015_CMU11%>%count(logon_DTS)
+```
+```{r}
+length(unique(usage_2015_CMU11$logon_DTS))
+```
+**There are 223 days on system.**
+
+```{r}
+length(unique(usage_2015_CMU1$userid))/length(unique(usage_2015_CMU11$logon_DTS))
+```
+
+
+**There are 3013 total users on the system and 223 dates. The average number of users per day is  3013/223= 13.51**
+
+
+
+**What is the highest number of users per day?**
+
+
+```{r}
+usage_2015_CMU11%>% count(logon_DTS)%>%  arrange(desc(n))
+```
+**The highest user was On April 28,2015 and the total number of users on that day was 5205.**
+
+
+**A-D: top 5 users by number of times logged in, bottom 3 applications by length of time run**
+
+
+```{r}
+##Formatting dates and times
+usage_2015_CMU11$Start_Hours <- format(as.POSIXct(usage_2015_CMU11$start,"%Y-%m-%d %H:%M:%S",tz = ""), format = "%H:%M")
+
+usage_2015_CMU11$Stop_Hours <- format(as.POSIXct(usage_2015_CMU11$stop,"%Y-%m-%d %H:%M:%S",tz = ""), format = "%H:%M")
+```
+
+
+```{r}
+##Returning the position of the specified values in the logical vector
+which(usage_2015_CMU11$Stop_Hours=="00:00")
+which(usage_2015_CMU11$Start_Hours=="00:00")
+S1<-which(usage_2015_CMU11$Stop_Hours=="00:00")
+S2<-which(usage_2015_CMU11$Start_Hours=="00:00")
+usage_2015_CMU12<-usage_2015_CMU11[-c(S1,S2),]
+```
+
+
+```{r}
+which(is.na(as.Date(usage_2015_CMU11$start)))
+which(is.na(as.Date(usage_2015_CMU11$stop)))
+```
+
+
+```{r}
+##Unclass stop_1
+stop_1<-as.POSIXlt(usage_2015_CMU12$stop)
+stop_11<-unclass(stop_1)
+names(stop_11)
+```
+
+```{r}
+##Unclass start_1
+start_1<-as.POSIXlt(usage_2015_CMU12$start)
+start_11<-unclass(start_1)
+names(start_11)
+```
+**I did unclass for stop_1 and start_1.**
+
+```{r}
+stop_min<-stop_11$min
+start_min<-start_11$min
+stop_hour<-stop_11$hour
+start_hour<-start_11$hour
+```
+
+```{r}
+##Creating time difference to show the length of time run
+diff_hour<-stop_hour-start_hour
+diff_min<-stop_min-start_min
+diff<-diff_min+(diff_hour*60)
+usage_N=cbind(usage_2015_CMU12,diff)
+```
+**I created time difference in minutes to see the length of time run.**
+
+```{r}
+##Top 5 users by number of times logged in
+usage_N%>% count(userid)%>% arrange(desc(n))
+```
+**The top 5 users by number of times logged in are 'userid5179', 'userid23588', 'userid25643', 'userid13479' and 'userid25647'.**
+
+
+```{r}
+##Bottom 3 applications by length of time run
+usage_N%>%arrange(diff)
+```
+**The bottom 3 applications by length of time run are 'SnippingTool', 'POWERPNT' and 'iexplore'.**
+
+
